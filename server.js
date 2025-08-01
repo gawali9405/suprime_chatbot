@@ -27,7 +27,7 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 const WEBHOOK_URL = `https://your-domain.com/webhook/${process.env.TELEGRAM_BOT_TOKEN}`;
 
 // For development, we'll use polling instead of webhook
-if (process.env.NODE_ENV === 'development') {
+if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'production') {
   bot.startPolling();
   console.log('Bot started with polling for development');
 } else {

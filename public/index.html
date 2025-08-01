@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -25,7 +26,7 @@
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
+            padding: 20px;
             max-width: 500px;
             width: 100%;
             text-align: center;
@@ -182,9 +183,10 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
-        <h1>📱 Telegram QR Generator</h1>   
+
 
         <div class="bot-info">
             <h3>🤖 Bot Information</h3>
@@ -204,40 +206,27 @@
         <div class="qr-result" id="qrResult">
             <h3>✅ QR Code Generated!</h3>
             <div class="qr-code" id="qrCodeDiv"></div>
-            <div class="qr-text" >https://t.me/enquiry_chat_bot</div>
+            <div class="qr-text">https://t.me/enquiry_chat_bot</div>
         </div>
 
-        <div class="flow-steps">
-            <h3>📋 User Flow</h3>
-            <ol>
-                <li>User scans the QR code</li>
-                <li>Redirected to Telegram channel</li>
-                <li>Channel shows bot invitation</li>
-                <li>User starts chat with @enquiry_chat_bot</li>
-                <li>User sends messages/inquiries</li>
-                <li>Messages stored in Supabase</li>
-                <li>Admin can view in Supabase dashboard</li>
-                <li>Auto-replies sent to users</li>
-            </ol>
-        </div>
     </div>
 
     <script>
         document.getElementById('qrForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const generateBtn = document.getElementById('generateBtn');
             const errorDiv = document.getElementById('errorDiv');
-            const qrResult = document.getElementById('qrResult'); 
-            
+            const qrResult = document.getElementById('qrResult');
+
             // Hide previous results
             errorDiv.style.display = 'none';
             qrResult.style.display = 'none';
-            
+
             // Disable button
             generateBtn.disabled = true;
             generateBtn.textContent = '⏳ Generating...';
-            
+
             try {
                 const response = await fetch('/api/generate-qr', {
                     method: 'POST',
@@ -245,12 +234,12 @@
                         'Content-Type': 'application/json',
                     }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     // Show QR code
-                    document.getElementById('qrCodeDiv').innerHTML = `<img src="${data.qrCode}" alt="QR Code">`; 
+                    document.getElementById('qrCodeDiv').innerHTML = `<img src="${data.qrCode}" alt="QR Code">`;
                     qrResult.style.display = 'block';
                 } else {
                     throw new Error(data.error || 'Failed to generate QR code');
@@ -271,4 +260,5 @@
         });
     </script>
 </body>
+
 </html>

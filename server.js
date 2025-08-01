@@ -71,7 +71,11 @@ bot.onText(/\/start/, async (msg) => {
         first_name: firstName,
         last_name: lastName,
         last_interaction: new Date().toISOString()
-      });
+      },
+      {
+        onConflict: 'user_id'   
+      }
+    );
 
     if (error) {
       console.error('Error storing user:', error);
@@ -163,7 +167,11 @@ bot.on('contact', async (msg) => {
         first_name: firstName,
         last_name: lastName,
         last_interaction: new Date().toISOString()
-      });
+      },
+      {
+        onConflict: 'user_id'   
+      }
+    );
 
     if (userError) {
       console.error('Error storing user:', userError);
@@ -338,22 +346,100 @@ app.get('/api/messages', async (req, res) => {
   }
 });
 
-// API endpoint to get users
+// API endpoint to get users with their latest messages
 app.get('/api/users', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    // Get users with their latest message
+    const { data: users, error: usersError } = await supabase
       .from('users')
       .select('*')
       .order('last_interaction', { ascending: false });
 
-    if (error) {
-      throw error;
+    if (usersError) {
+      throw usersError;
     }
 
-    res.json({ success: true, users: data });
+    // Get latest message for each user
+    const usersWithMessages = await Promise.all(
+      users.map(async (user) => {
+        const { data: messages, error: msgError } = await supabase
+          .from('messages')
+          .select('message_text, created_at')
+          .eq('user_id', user.user_id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        return {
+          ...user,
+          latest_message: messages && messages.length > 0 ? messages[0] : null
+        };
+      })
+    );
+
+    res.json({ success: true, users: usersWithMessages });
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch users' });
+  }
+});
+
+// API endpoint to send message to a specific user
+app.post('/api/send-message', async (req, res) => {
+  try {
+    const { userId, message } = req.body;
+
+    if (!userId || !message) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID and message are required' 
+      });
+    }
+
+    // Get user's chat_id from database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('chat_id, first_name, last_name')
+      .eq('user_id', userId)
+      .single();
+
+    if (userError || !userData) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+
+    // Send message via Telegram bot
+    await bot.sendMessage(userData.chat_id, message);
+
+    // Store the admin message in database
+    const { error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        user_id: userId,
+        chat_id: userData.chat_id,
+        message_text: message,
+        username: 'ADMIN',
+        first_name: 'Admin',
+        last_name: 'Reply',
+        is_admin_reply: true,
+        created_at: new Date().toISOString()
+      });
+
+    if (messageError) {
+      console.error('Error storing admin message:', messageError);
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Message sent to ${userData.first_name} ${userData.last_name}` 
+    });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to send message' 
+    });
   }
 });
 
@@ -369,6 +455,11 @@ app.get('/health', (req, res) => {
 // Serve the main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Serve the admin dashboard
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // Start server

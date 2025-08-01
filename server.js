@@ -195,7 +195,8 @@ bot.on('contact', async (msg) => {
           user_id: contact.user_id
         }),
         timestamp: new Date().toISOString()
-      });
+      }
+    );
 
     if (error) {
       console.error('Error storing contact:', error);
@@ -257,7 +258,11 @@ bot.on('message', async (msg) => {
           message_id: msg.message_id
         }),
         timestamp: new Date().toISOString()
-      });
+      },
+      {
+        onConflict: 'user_id'
+      }
+    );
 
     if (error) {
       console.error('Error storing message:', error);
@@ -364,14 +369,18 @@ app.get('/api/users', async (req, res) => {
       users.map(async (user) => {
         const { data: messages, error: msgError } = await supabase
           .from('messages')
-          .select('message_text, created_at')
+          .select('content, timestamp, sender_type')
           .eq('user_id', user.user_id)
-          .order('created_at', { ascending: false })
+          .order('timestamp', { ascending: false })
           .limit(1);
 
         return {
           ...user,
-          latest_message: messages && messages.length > 0 ? messages[0] : null
+          latest_message: messages && messages.length > 0 ? {
+            message_text: messages[0].content,
+            created_at: messages[0].timestamp,
+            sender_type: messages[0].sender_type
+          } : null
         };
       })
     );
@@ -412,18 +421,20 @@ app.post('/api/send-message', async (req, res) => {
     // Send message via Telegram bot
     await bot.sendMessage(userData.chat_id, message);
 
-    // Store the admin message in database
+    // Store the admin message in the messages table
     const { error: messageError } = await supabase
       .from('messages')
       .insert({
         user_id: userId,
         chat_id: userData.chat_id,
-        message_text: message,
-        username: 'ADMIN',
-        first_name: 'Admin',
-        last_name: 'Reply',
-        is_admin_reply: true,
-        created_at: new Date().toISOString()
+        message_type: 'text',
+        content: message,
+        sender_type: 'admin', // Important to indicate it's from admin
+        metadata: JSON.stringify({
+          from: 'admin',
+          sent_by: 'dashboard'
+        }),
+        timestamp: new Date().toISOString()
       });
 
     if (messageError) {
@@ -442,6 +453,7 @@ app.post('/api/send-message', async (req, res) => {
     });
   }
 });
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {

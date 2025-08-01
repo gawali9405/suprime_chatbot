@@ -248,7 +248,7 @@ app.post('/api/generate-qr', async (req, res) => {
     const { text, channelUsername } = req.body;
     
     // Default to provided channel or use custom text
-    const qrText = text || `https://t.me/${channelUsername || 'YourChannel'}`;
+    const qrText = text || `https://t.me/${channelUsername || 'enquiry_chat_bot'}`;
     
     const qrCodeDataURL = await QRCode.toDataURL(qrText, {
       width: 300,

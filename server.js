@@ -147,6 +147,30 @@ bot.on('callback_query', async (callbackQuery) => {
 bot.on('contact', async (msg) => {
   const chatId = msg.chat.id;
   const contact = msg.contact;
+  const userId = msg.from.id;
+  const username = msg.from.username || 'Unknown';
+  const firstName = msg.from.first_name || '';
+  const lastName = msg.from.last_name || '';
+
+  // Store/update user info in Supabase first
+  try {
+    const { error: userError } = await supabase
+      .from('users')
+      .upsert({
+        user_id: userId,
+        chat_id: chatId,
+        username: username,
+        first_name: firstName,
+        last_name: lastName,
+        last_interaction: new Date().toISOString()
+      });
+
+    if (userError) {
+      console.error('Error storing user:', userError);
+    }
+  } catch (err) {
+    console.error('Supabase user error:', err);
+  }
 
   // Store contact info in Supabase
   try {
@@ -186,6 +210,28 @@ bot.on('message', async (msg) => {
   const userId = msg.from.id;
   const messageText = msg.text || '';
   const username = msg.from.username || 'Unknown';
+  const firstName = msg.from.first_name || '';
+  const lastName = msg.from.last_name || '';
+
+  // Store/update user info in Supabase first
+  try {
+    const { error: userError } = await supabase
+      .from('users')
+      .upsert({
+        user_id: userId,
+        chat_id: chatId,
+        username: username,
+        first_name: firstName,
+        last_name: lastName,
+        last_interaction: new Date().toISOString()
+      });
+
+    if (userError) {
+      console.error('Error storing user:', userError);
+    }
+  } catch (err) {
+    console.error('Supabase user error:', err);
+  }
 
   // Store message in Supabase
   try {

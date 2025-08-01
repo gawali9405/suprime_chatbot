@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram QR Code Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .qr-result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            display: none;
+        }
+
+        .qr-code {
+            margin: 20px 0;
+        }
+
+        .qr-code img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .qr-text {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            word-break: break-all;
+            color: #333;
+            border: 1px solid #e1e5e9;
+        }
+
+        .error {
+            color: #e74c3c;
+            background: #ffeaea;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .bot-info {
+            background: #e8f4fd;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .bot-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .bot-info p {
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .flow-steps {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 30px;
+            text-align: left;
+        }
+
+        .flow-steps h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .flow-steps ol {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .flow-steps li {
+            margin-bottom: 8px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Telegram QR Generator</h1>   
+
+        <div class="bot-info">
+            <h3>🤖 Bot Information</h3>
+            <p><strong>Bot Username:</strong> @enquiry_chat_bot</p>
+            <p><strong>Purpose:</strong> Customer inquiries and support</p>
+            <p><strong>Features:</strong> Message storage, auto-replies, admin notifications</p>
+        </div>
+
+        <form id="qrForm">
+            <button type="submit" class="btn" id="generateBtn">
+                🔄 Generate QR Code
+            </button>
+        </form>
+
+        <div class="error" id="errorDiv"></div>
+
+        <div class="qr-result" id="qrResult">
+            <h3>✅ QR Code Generated!</h3>
+            <div class="qr-code" id="qrCodeDiv"></div>
+            <div class="qr-text" >https://t.me/enquiry_chat_bot</div>
+        </div>
+
+        <div class="flow-steps">
+            <h3>📋 User Flow</h3>
+            <ol>
+                <li>User scans the QR code</li>
+                <li>Redirected to Telegram channel</li>
+                <li>Channel shows bot invitation</li>
+                <li>User starts chat with @enquiry_chat_bot</li>
+                <li>User sends messages/inquiries</li>
+                <li>Messages stored in Supabase</li>
+                <li>Admin can view in Supabase dashboard</li>
+                <li>Auto-replies sent to users</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('qrForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const generateBtn = document.getElementById('generateBtn');
+            const errorDiv = document.getElementById('errorDiv');
+            const qrResult = document.getElementById('qrResult'); 
+            
+            // Hide previous results
+            errorDiv.style.display = 'none';
+            qrResult.style.display = 'none';
+            
+            // Disable button
+            generateBtn.disabled = true;
+            generateBtn.textContent = '⏳ Generating...';
+            
+            try {
+                const response = await fetch('/api/generate-qr', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Show QR code
+                    document.getElementById('qrCodeDiv').innerHTML = `<img src="${data.qrCode}" alt="QR Code">`; 
+                    qrResult.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Failed to generate QR code');
+                }
+            } catch (error) {
+                errorDiv.textContent = `Error: ${error.message}`;
+                errorDiv.style.display = 'block';
+            } finally {
+                // Re-enable button
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🔄 Generate QR Code';
+            }
+        });
+
+        // Auto-generate QR code on page load
+        window.addEventListener('load', () => {
+            document.getElementById('qrForm').dispatchEvent(new Event('submit'));
+        });
+    </script>
+</body>
+</html>

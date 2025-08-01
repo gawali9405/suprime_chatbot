@@ -233,6 +233,9 @@ bot.on('message', async (msg) => {
         first_name: firstName,
         last_name: lastName,
         last_interaction: new Date().toISOString()
+      },
+      {
+        onConflict: 'user_id'
       });
 
     if (userError) {
@@ -255,20 +258,15 @@ bot.on('message', async (msg) => {
           username: username,
           first_name: msg.from.first_name,
           last_name: msg.from.last_name,
-          message_id: msg.message_id
+          message_id: msg.message_id,
+          sender_type: 'user'
         }),
         timestamp: new Date().toISOString()
-      },
-      {
-        onConflict: 'user_id'
-      }
-    );
+      });
 
     if (error) {
       console.error('Error storing message:', error);
-    } else {
-      console.log('Message stored successfully in Supabase');
-    }
+    }  
   } catch (err) {
     console.error('Supabase error:', err);
   }
@@ -364,9 +362,10 @@ app.get('/api/users', async (req, res) => {
       throw usersError;
     }
 
-    // Get latest message for each user
+    // Get latest message and unread count for each user
     const usersWithMessages = await Promise.all(
       users.map(async (user) => {
+        // Get latest message
         const { data: messages, error: msgError } = await supabase
           .from('messages')
           .select('content, timestamp, sender_type')
@@ -374,13 +373,35 @@ app.get('/api/users', async (req, res) => {
           .order('timestamp', { ascending: false })
           .limit(1);
 
+        // Get unread message count (messages from user after last interaction, not admin)
+        const { data: unreadMessages, error: unreadError } = await supabase
+          .from('messages')
+          .select('id, metadata, timestamp')
+          .eq('user_id', user.user_id)
+          .gt('timestamp', user.last_interaction || '1970-01-01')
+          .order('timestamp', { ascending: false });
+
+        // Filter out admin messages by checking metadata
+        const userMessages = unreadMessages ? unreadMessages.filter(msg => {
+          try {
+            const metadata = typeof msg.metadata === 'string' ? JSON.parse(msg.metadata) : msg.metadata;
+            return metadata?.sender_type !== 'admin';
+          } catch (e) {
+            // If metadata parsing fails, assume it's a user message
+            return true;
+          }
+        }) : [];
+
+        const unreadCount = userMessages ? userMessages.length : 0;
+
         return {
           ...user,
           latest_message: messages && messages.length > 0 ? {
             message_text: messages[0].content,
             created_at: messages[0].timestamp,
             sender_type: messages[0].sender_type
-          } : null
+          } : null,
+          unread_count: unreadCount
         };
       })
     );
@@ -429,10 +450,10 @@ app.post('/api/send-message', async (req, res) => {
         chat_id: userData.chat_id,
         message_type: 'text',
         content: message,
-        sender_type: 'admin', // Important to indicate it's from admin
         metadata: JSON.stringify({
           from: 'admin',
-          sent_by: 'dashboard'
+          sent_by: 'dashboard',
+          sender_type: 'admin'
         }),
         timestamp: new Date().toISOString()
       });
@@ -454,6 +475,65 @@ app.post('/api/send-message', async (req, res) => {
   }
 });
 
+// API endpoint to get messages for a specific user
+app.get('/api/messages', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID is required' 
+      });
+    }
+
+    const { data: messages, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('user_id', userId)
+      .order('timestamp', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching messages for user', userId, ':', error);
+      throw error;
+    }
+
+    console.log(`Fetched ${messages ? messages.length : 0} messages for user ${userId}:`, messages);
+    res.json({ success: true, messages: messages || [] });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch messages' });
+  }
+});
+
+// API endpoint to mark messages as seen for a user
+app.post('/api/mark-seen', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID is required' 
+      });
+    }
+
+    // Update user's last_interaction to current time to mark messages as seen
+    const { error } = await supabase
+      .from('users')
+      .update({ last_interaction: new Date().toISOString() })
+      .eq('user_id', userId);
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({ success: true, message: 'Messages marked as seen' });
+  } catch (error) {
+    console.error('Error marking messages as seen:', error);
+    res.status(500).json({ success: false, error: 'Failed to mark messages as seen' });
+  }
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

@@ -121,6 +121,34 @@
             font-weight: bold;
             font-size: 1.2em;
             flex-shrink: 0;
+            position: relative;
+        }
+
+        .avatar-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            background: #ff3333;
+            color: white;
+            border-radius: 50%;
+            min-width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7em;
+            font-weight: bold;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .notification-badge.hidden {
+            display: none;
         }
 
         .chat-info {
@@ -468,6 +496,7 @@
             loadUsers();
             setupMessageInput();
             setupSearch();
+            startAutoRefresh();
         });
 
         async function loadUsers() {
@@ -510,9 +539,15 @@
                         messageTime = formatTime(user.latest_message.created_at);
                     }
 
+                    const unreadCount = user.unread_count || 0;
+                    const badgeHtml = unreadCount > 0 ? `<div class="notification-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : '';
+                    
                     return `
                         <div class="chat-item" onclick="selectChat('${user.user_id}', '${escapeHtml(userName)}', '${escapeHtml(username)}')">
-                            <div class="avatar">${initials}</div>
+                            <div class="avatar-container">
+                                <div class="avatar">${initials}</div>
+                                ${badgeHtml}
+                            </div>
                             <div class="chat-info">
                                 <div class="chat-name">${escapeHtml(userName)}</div>
                                 <div class="chat-last-message">${escapeHtml(lastMessage)}</div>
@@ -537,6 +572,10 @@
             // Add active class to selected chat
             event.currentTarget.classList.add('active');
 
+            // Clear previous chat state
+            messages = [];
+            
+            // Update current chat
             currentChat = { userId, userName, username };
 
             // Show chat content
@@ -549,24 +588,33 @@
             document.getElementById('chatName').textContent = userName;
             document.getElementById('chatStatus').textContent = `@${username}`;
 
-            // Load messages for this chat
+            // Mark messages as seen and clear notification badge
+            markMessagesAsSeen(userId);
+            clearNotificationBadge(userId);
+            
+            // Load messages for this specific user only
             loadMessages(userId);
         }
 
         async function loadMessages(userId) {
+            // Clear previous messages immediately when switching users
+            const container = document.getElementById('messagesContainer');
+            container.innerHTML = '<div style="text-align: center; padding: 20px; color: #667781;">Loading messages...</div>';
+            
             try {
                 const response = await fetch(`/api/messages?userId=${userId}`);
                 const data = await response.json();
 
                 if (data.success) {
-                    messages = data.messages || [];
+                    // Filter messages to ensure we only show messages for this specific user
+                    messages = (data.messages || []).filter(msg => msg.user_id.toString() === userId.toString());
                     displayMessages(messages);
                 } else {
-                    // If no messages endpoint, show placeholder
+                    console.error('Failed to load messages:', data.error);
                     displayMessages([]);
                 }
             } catch (error) {
-                console.log('Messages endpoint not available, showing placeholder');
+                console.error('Error loading messages:', error);
                 displayMessages([]);
             }
         }
@@ -582,13 +630,29 @@
                     </div>
                 `;
             } else {
-                container.innerHTML = messages.map(message => {
-                    const isAdmin = message.sender_type === 'admin';
+                // Sort messages by timestamp to ensure chronological order (oldest first, latest at bottom)
+                const sortedMessages = [...messages].sort((a, b) => {
+                    const timeA = new Date(a.timestamp || a.created_at).getTime();
+                    const timeB = new Date(b.timestamp || b.created_at).getTime();
+                    return timeA - timeB;
+                });
+
+                container.innerHTML = sortedMessages.map(message => {
+                    // Check metadata for sender_type
+                    let isAdmin = false;
+                    try {
+                        const metadata = typeof message.metadata === 'string' ? JSON.parse(message.metadata) : message.metadata;
+                        isAdmin = metadata?.sender_type === 'admin';
+                    } catch (e) {
+                        // If metadata parsing fails, assume it's a user message
+                        isAdmin = false;
+                    }
+                    
                     const messageClass = isAdmin ? 'sent' : 'received';
                     const time = formatTime(message.timestamp || message.created_at);
 
                     return `
-                        <div class="message ${messageClass}">
+                        <div class="message ${messageClass}" data-timestamp="${message.timestamp || message.created_at}">
                             <div class="message-text">${escapeHtml(message.content || message.message_text)}</div>
                             <div class="message-time">${time}</div>
                         </div>
@@ -596,8 +660,10 @@
                 }).join('');
             }
 
-            // Scroll to bottom
-            container.scrollTop = container.scrollHeight;
+            // Smooth scroll to bottom to show latest messages
+            setTimeout(() => {
+                container.scrollTop = container.scrollHeight;
+            }, 100);
         }
 
         async function sendMessage() {
@@ -648,8 +714,8 @@
 
                     showSuccess('Message sent successfully!');
 
-                    // Refresh chat list to update last message
-                    setTimeout(() => loadUsers(), 1000);
+                    // Refresh chat list to update last message and badge counts
+                    setTimeout(() => loadUsers(), 500);
                 } else {
                     showError('Failed to send message: ' + data.error);
                 }
@@ -688,6 +754,122 @@
                     return userName.includes(query) || username.includes(query);
                 });
                 displayChatList(filteredUsers);
+            });
+        }
+
+        function startAutoRefresh() {
+            // Refresh chat list every 3 seconds for badge updates
+            setInterval(() => {
+                loadUsers();
+            }, 3000);
+
+            // Refresh messages for current chat every 2 seconds for real-time updates
+            setInterval(() => {
+                if (currentSelectedUserId) {
+                    loadMessagesWithoutScroll(currentSelectedUserId);
+                }
+            }, 2000);
+        }
+
+        // Load messages without auto-scrolling (for real-time updates)
+        async function loadMessagesWithoutScroll(userId) {
+            try {
+                const response = await fetch(`/api/messages?userId=${userId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const container = document.getElementById('messagesContainer');
+                    const wasAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 10;
+                    
+                    displayMessagesWithoutScroll(data.messages, wasAtBottom);
+                } else {
+                    console.error('Failed to load messages:', data.error);
+                }
+            } catch (error) {
+                console.error('Error loading messages:', error);
+            }
+        }
+
+        // Display messages without forcing scroll (preserve user's scroll position unless they were at bottom)
+        function displayMessagesWithoutScroll(messages, wasAtBottom) {
+            const container = document.getElementById('messagesContainer');
+
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #667781;">
+                        <p>No messages yet</p>
+                        <p style="font-size: 0.8em; margin-top: 10px;">Start the conversation by sending a message below</p>
+                    </div>
+                `;
+            } else {
+                // Sort messages by timestamp to ensure chronological order (oldest first, latest at bottom)
+                const sortedMessages = [...messages].sort((a, b) => {
+                    const timeA = new Date(a.timestamp || a.created_at).getTime();
+                    const timeB = new Date(b.timestamp || b.created_at).getTime();
+                    return timeA - timeB;
+                });
+
+                container.innerHTML = sortedMessages.map(message => {
+                    // Check metadata for sender_type
+                    let isAdmin = false;
+                    try {
+                        const metadata = typeof message.metadata === 'string' ? JSON.parse(message.metadata) : message.metadata;
+                        isAdmin = metadata?.sender_type === 'admin';
+                    } catch (e) {
+                        // If metadata parsing fails, assume it's a user message
+                        isAdmin = false;
+                    }
+                    
+                    const messageClass = isAdmin ? 'sent' : 'received';
+                    const time = formatTime(message.timestamp || message.created_at);
+
+                    return `
+                        <div class="message ${messageClass}" data-timestamp="${message.timestamp || message.created_at}">
+                            <div class="message-text">${escapeHtml(message.content || message.message_text)}</div>
+                            <div class="message-time">${time}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Only scroll to bottom if user was already at bottom (for new messages)
+            if (wasAtBottom) {
+                setTimeout(() => {
+                    container.scrollTop = container.scrollHeight;
+                }, 50);
+            }
+        }
+
+        async function markMessagesAsSeen(userId) {
+            try {
+                const response = await fetch('/api/mark-seen', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ userId: userId })
+                });
+
+                const data = await response.json();
+                if (!data.success) {
+                    console.error('Failed to mark messages as seen:', data.error);
+                }
+            } catch (error) {
+                console.error('Error marking messages as seen:', error);
+            }
+        }
+
+        function clearNotificationBadge(userId) {
+            // Find the chat item for this user and hide its notification badge
+            const chatItems = document.querySelectorAll('.chat-item');
+            chatItems.forEach(item => {
+                const onclickAttr = item.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes(`'${userId}'`)) {
+                    const badge = item.querySelector('.notification-badge');
+                    if (badge) {
+                        badge.style.display = 'none';
+                    }
+                }
             });
         }
 

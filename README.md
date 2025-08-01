@@ -34,21 +34,7 @@ npm install
 ### 2. Environment Configuration
 
 The `.env` file is already configured with your credentials:
-
-```env
-# Supabase Config
-SUPABASE_PROJECT_URL=https://maqvnzockazbnrovcysm.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-
-# Telegram Bot Config
-TELEGRAM_BOT_TOKEN=8469388720:AAGHH7FIQZe2KKLhjS9cXNgwy287URQ40Fo
-BOT_USERNAME=enquiry_chat_bot
-ADMIN_TELEGRAM_ID=1327379599
-
-# App Config
-PORT=3000
-NODE_ENV=development
-```
+ 
 
 ### 3. Supabase Database Setup
 
